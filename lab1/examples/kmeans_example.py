@@ -25,7 +25,7 @@ plt.waitforbuttonpress()
 plt.figure(2)
 
 # obiekt KMeans (potestuj rozne n_clusters)
-kmeans = KMeans(n_clusters=4)
+kmeans = KMeans(n_clusters=6)
 
 # wykonaj kmeans
 kmeans.fit(points)
