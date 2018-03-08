@@ -9,8 +9,7 @@ from sklearn import linear_model
 
 
 normal1_mean=[4, 6]
-normal1_cov = [[1.5,2],
-               [2,4]];
+normal1_cov = [[1.5,2],[2,4]];
 
 num_points1 = 400
 

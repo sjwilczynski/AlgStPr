@@ -36,7 +36,7 @@ def generate_response(X,beta, debug = False):
 d = 3 #num_features
 n = 30 #num_samples
 	
-#print(generate_data(n,d,0.9,'auto_corr', True).shape)	
+
 beta = np.random.uniform(1,3,d)
 X = generate_data(n,d,0.9,'independent', True)
 Y = generate_response(X,beta, True)
