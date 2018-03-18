@@ -123,8 +123,7 @@ def svrg(x, y, epsilon=0.000001, step=0.01, lam=0.01, prox=False, T=100):
     while (np.abs(curr_loss - prev_loss) > epsilon and steps < STEPS) or steps < STEPS // 4:
         a_avg = np.array(a)
         p = np.exp(np.dot(x, a_avg)) / (1 + np.exp(np.dot(x, a_avg))).reshape(n, 1)
-        M = np.multiply(p - y, x)
-        grad_avg = np.mean(M, axis=0)
+        grad_avg = np.mean(np.multiply(p - y, x), axis=0)
         # svrg inner loop
         for _ in range(T):
             losses += [loss(a, x, y)]
