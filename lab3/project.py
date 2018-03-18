@@ -4,8 +4,9 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
-n = 1000
-d = 10
+n = 10000
+d = 50
+STEPS = 2 * 10 ** 3
 
 
 def loss(a, x, y):
@@ -62,13 +63,13 @@ def stochastic_grad_step(a, x, y, step=0.01):
 
 
 # gradient descent algorithm
-def gradient_descent(x, y, epsilon=0.0000000001, step=0.01, lam=0.01, prox=False, stochastic=False):
+def gradient_descent(x, y, epsilon=0.000001, step=0.01, lam=0.01, prox=False, stochastic=False):
     a = np.random.randn(d).reshape(d, 1)
     losses = []
     prev_loss = sys.maxsize
     curr_loss = 0
     steps = 0
-    while np.abs(curr_loss - prev_loss) > epsilon and steps < 10 ** 4:
+    while (np.abs(curr_loss - prev_loss) > epsilon and steps < STEPS) or steps < STEPS // 4:
         losses += [loss(a, x, y)]
         if stochastic:
             a = stochastic_grad_step(a, x, y, step)
@@ -83,8 +84,8 @@ def gradient_descent(x, y, epsilon=0.0000000001, step=0.01, lam=0.01, prox=False
 
 
 # saga algorithm
-def saga(x, y, epsilon=0.00000001, step=0.01, prox=False):
-    a = np.zeros(d).reshape(d, 1)
+def saga(x, y, epsilon=0.000001, step=0.01, prox=False):
+    a = np.random.randn(d).reshape(d, 1)
     p = np.exp(np.dot(x, a)) / (1 + np.exp(np.dot(x, a))).reshape(n, 1)
     M = np.multiply(p - y, x)
     avg = np.mean(M, axis=0)
@@ -92,7 +93,7 @@ def saga(x, y, epsilon=0.00000001, step=0.01, prox=False):
     prev_loss = sys.maxsize
     curr_loss = 0
     steps = 0
-    while np.abs(curr_loss - prev_loss) > epsilon and steps < 10 ** 4:
+    while (np.abs(curr_loss - prev_loss) > epsilon and steps < STEPS) or steps < STEPS // 4:
         losses += [loss(a, x, y)]
         ####saga step
         j = np.random.randint(n)
@@ -112,8 +113,33 @@ def saga(x, y, epsilon=0.00000001, step=0.01, prox=False):
 
 
 # svrg algorithm
-def svrg(x, y, epsilon=0.00001, step=0.01, lam=0.01, prox=False):
-    pass
+def svrg(x, y, epsilon=0.000001, step=0.01, lam=0.01, prox=False, T=100):
+    a = np.random.randn(d).reshape(d, 1)
+    losses = []
+    prev_loss = sys.maxsize
+    curr_loss = 0
+    steps = 0
+    # svrg outer loop
+    while (np.abs(curr_loss - prev_loss) > epsilon and steps < STEPS) or steps < STEPS // 4:
+        a_avg = np.array(a)
+        p = np.exp(np.dot(x, a_avg)) / (1 + np.exp(np.dot(x, a_avg))).reshape(n, 1)
+        M = np.multiply(p - y, x)
+        grad_avg = np.mean(M, axis=0)
+        # svrg inner loop
+        for _ in range(T):
+            losses += [loss(a, x, y)]
+            steps += 1
+            j = np.random.randint(n)
+            p = np.exp(np.dot(x[j, :], a)) / (1 + np.exp(np.dot(x[j, :], a))).ravel()[0]
+            p_avg = np.exp(np.dot(x[j, :], a_avg)) / (1 + np.exp(np.dot(x[j, :], a_avg))).ravel()[0]
+            deriv = (p - y[j]) * x[j, :]
+            deriv_avg = (p_avg - y[j]) * x[j, :]
+            a -= step * ((deriv - deriv_avg + grad_avg).reshape(-1, 1))
+            if prox:
+                a = proximal(a, step, lam)
+            prev_loss = curr_loss
+            curr_loss = loss(a, x, y)
+    return a, losses, steps
 
 
 beta = np.random.uniform(-1, 2, d).reshape(-1, 1)  # very important reshape
@@ -125,13 +151,14 @@ beta = np.random.uniform(-1, 2, d).reshape(-1, 1)  # very important reshape
 x = generate_data(n, d, 0.9, 'independent')
 y = generate_response(x, beta)
 
-start_ind = 2
-a, losses, steps_count = gradient_descent(x, y)
+start_ind = 1
+a, losses, steps_count = gradient_descent(x, y, step=0.0001)
 print('Number of nonzero coeff: {}'.format(np.sum(a != 0)))
 print('Squared error for betas: {}'.format(np.sum((a - beta) ** 2)))
 print('Steps count for GD: {}\nThe loss was {}'.format(steps_count, losses[-1]))
 plt.figure(1)
 plt.plot(np.arange(len(losses[start_ind:])), losses[start_ind:], label='Loss for GD')
+print('---------------------------------------------------------------')
 
 a, losses, steps_count = gradient_descent(x, y, step=0.02, stochastic=True)
 print('Number of nonzero coeff: {}'.format(np.sum(a != 0)))
@@ -139,13 +166,22 @@ print('Squared error for betas: {}'.format(np.sum((a - beta) ** 2)))
 print('Steps count for SGD: {}\nThe loss was {}'.format(steps_count, losses[-1]))
 plt.figure(1)
 plt.plot(np.arange(len(losses[start_ind:])), losses[start_ind:], label='Loss for SGD')
+print('---------------------------------------------------------------')
 
-a, losses, steps_count = saga(x, y, step=0.05)
+a, losses, steps_count = saga(x, y, step=0.015)
 print('Number of nonzero coeff: {}'.format(np.sum(a != 0)))
 print('Squared error for betas: {}'.format(np.sum((a - beta) ** 2)))
 print('Steps count for SAGA: {}\nThe loss was {}'.format(steps_count, losses[-1]))
 plt.figure(1)
 plt.plot(np.arange(len(losses[start_ind:])), losses[start_ind:], label='Loss for SAGA')
+print('---------------------------------------------------------------')
+
+a, losses, steps_count = svrg(x, y, step=0.05)
+print('Number of nonzero coeff: {}'.format(np.sum(a != 0)))
+print('Squared error for betas: {}'.format(np.sum((a - beta) ** 2)))
+print('Steps count for SVRG: {}\nThe loss was {}'.format(steps_count, losses[-1]))
+plt.figure(1)
+plt.plot(np.arange(len(losses[start_ind:])), losses[start_ind:], label='Loss for SVRG')
 
 plt.legend()
 plt.show()
