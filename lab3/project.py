@@ -151,7 +151,7 @@ x = generate_data(n, d, 0.9, 'independent')
 y = generate_response(x, beta)
 
 start_ind = 1
-a, losses, steps_count = gradient_descent(x, y, step=0.0001)
+a, losses, steps_count = gradient_descent(x, y, step=0.000005)
 print('Number of nonzero coeff: {}'.format(np.sum(a != 0)))
 print('Squared error for betas: {}'.format(np.sum((a - beta) ** 2)))
 print('Steps count for GD: {}\nThe loss was {}'.format(steps_count, losses[-1]))
@@ -167,7 +167,7 @@ plt.figure(1)
 plt.plot(np.arange(len(losses[start_ind:])), losses[start_ind:], label='Loss for SGD')
 print('---------------------------------------------------------------')
 
-a, losses, steps_count = saga(x, y, step=0.015)
+a, losses, steps_count = saga(x, y, step=0.02)
 print('Number of nonzero coeff: {}'.format(np.sum(a != 0)))
 print('Squared error for betas: {}'.format(np.sum((a - beta) ** 2)))
 print('Steps count for SAGA: {}\nThe loss was {}'.format(steps_count, losses[-1]))
