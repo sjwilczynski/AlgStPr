@@ -4,9 +4,9 @@
 # In[71]:
 
 import sys
-#import matplotlib.pyplot as plt
-#import numpy as np
-get_ipython().magic(u'pylab inline')
+import matplotlib.pyplot as plt
+import numpy as np
+#get_ipython().magic(u'pylab inline')
 
 
 T = 100
@@ -65,13 +65,18 @@ def generate_trajectory(T, starting_point):
     ys = np.dot(H,xs) + err
     return xs,ys
     
-def kalman_filter(xs, ys, T, mean, cov):
+def kalman_filter(ys, starting_point, Q, R):
     kalman_xs = np.zeros((4,T),dtype=np.float64)
-    kalman_xs[:,0] = np.array(mean,dtype=np.float64)
-    kalman_y = np.zeros((2,1),dtype=np.float64)
+    kalman_xs[:,0] = np.array(starting_point,dtype=np.float64)
+    kalman_xs_filtered = np.zeros((4,T),dtype=np.float64)
+    kalman_xs_filtered[:,0] = np.array(starting_point,dtype=np.float64)
     kalman_covs = np.zeros((4,4,T),dtype=np.float64)
+    kalman_covs_filtered = np.zeros((4,4,T),dtype=np.float64)
+    kalman_covs[:,:,0] = np.zeros_like(Q)
+    kalman_covs_filtered[:,:,0] = np.zeros_like(Q)
     kalman_s = np.zeros((2,2),dtype=np.float64)
     kalman_k = np.zeros((4,2),dtype=np.float64)
+    kalman_y = np.zeros((2,1),dtype=np.float64)
     
     kalman_x = np.array(kalman_xs[:,0]).reshape(4,1)
     kalman_cov = np.array(kalman_covs[:,:,0])
@@ -81,7 +86,7 @@ def kalman_filter(xs, ys, T, mean, cov):
         kalman_x = np.dot(F,kalman_x) + np.dot(B,u)
         kalman_cov = np.dot(np.dot(F,kalman_cov),F.T) + Q
         
-        #update
+        #update #in our notation X_{i|i-1}
         kalman_xs[:,i, None] = np.array(kalman_x)
         kalman_covs[:,:,i] = np.array(kalman_cov)
         
@@ -91,51 +96,104 @@ def kalman_filter(xs, ys, T, mean, cov):
         kalman_k = np.dot(np.dot(kalman_cov, H.T), np.linalg.inv(kalman_s))
         kalman_x += np.dot(kalman_k, kalman_y)
         kalman_cov -= np.dot(np.dot(kalman_k, H), kalman_cov)
+        # in our notation X{i|i}
+        kalman_covs_filtered[:,:,i] = np.array(kalman_cov)
+        kalman_xs_filtered[:,i,None] = np.array(kalman_x)
         
-    return kalman_xs, kalman_covs
-
-def rts_smoothing(xs, ys, kalman_xs, kalman_covs, T) :
-    rts_xs = np.array(kalman_xs)
-    rts_covs = np.array(kalman_covs)
-    rts_l = np.zeros((4,4),dtype=np.float64)
-    #nie musze pamietac tych rzeczy z indeksami sie nie zgadzajacymi - przeciez moge je policzyc
+    return kalman_xs, kalman_covs, kalman_xs_filtered, kalman_covs_filtered
     
+def rts_smoothing(ys, kalman_xs, kalman_covs, kalman_xs_filtered, kalman_covs_filtered):
+    rts_xs = np.zeros_like(kalman_xs)
+    rts_ls = np.zeros_like(kalman_covs)
+    rts_covs = np.zeros_like(kalman_covs)
+    rts_xs[:,T-1,None] = np.array(kalman_xs[:,T-1,None])
+    rts_cov = kalman_covs[:,:,0]
+    rts_l = np.zeros((4,4),dtype=np.float64)
+    rts_x = np.array(kalman_xs[:,T-1,None])
+
     for i in range(T-2,-1,-1):
-        pass#rts_l = kalman_covs[]
-    return    
+        cov_filtered = kalman_covs_filtered[:,:,i]
+        cov = kalman_covs[:,:,i+1]
+        rts_l = np.dot(cov_filtered, np.dot(F.T, np.linalg.inv(cov)))
+        rts_x = kalman_xs_filtered[:,i,None] + np.dot(rts_l, rts_x - kalman_xs[:,i+1,None])
+        rts_cov = cov_filtered + np.dot(rts_l, np.dot(rts_cov - cov, rts_l.T))
+        
+        #update - we will need it for EM
+        rts_xs[:,i,None] = np.array(rts_x)
+        rts_covs[:,:,i] = np.array(rts_cov)
+        rts_ls[:,:,i] = np.array(rts_l)
+        
+    return rts_xs, rts_covs, rts_ls
+    
+def em_algorithm(ys, starting_point, max_steps, epsilon):
+	
+	Q = np.eye(4)#5*np.random.randn(4,4)
+	R = np.eye(2)#5*np.random.randn(2,2)
+	steps = 0
+	diff = 1000
+	while steps < max_steps: # and diff > epsilon 
+		prev_Q = np.array(Q)
+		prev_R = np.array(R)
+		kalman_xs, kalman_covs, kalman_xs_filtered, kalman_covs_filtered = kalman_filter(ys, starting_point, Q, R)
+		rts_xs, rts_covs, rts_ls = rts_smoothing(ys, kalman_xs, kalman_covs, kalman_xs_filtered, kalman_covs_filtered)
+		
+		# faster in a matrix notation??
+		# E(x_k | Y_{1:T})
+		expected_xs = rts_xs
+		# E(x_kx_k^t| Y_{1:t})
+		expected_dot = # zle: np.array([np.dot(x,x.T) + sigma for (x,sigma) in zip(expected_xs, rts_covs)])
+		print(expected_dot.shape)
+		ind = 1
+		print(expected_dot[:,:,ind], '\n',  np.dot(expected_xs[:,ind,None], expected_xs[:,ind,None].T) + rts_covs[:,:,ind])
+		# E(x_kx_{k+1}^T| Y_{1:T})
+		#expected_dot_shift = 
+		
+		steps+=1
+	
+	
+	return Q,R
 
 
 # In[73]:
 
-starting_point = [0,200, 10, 50] 
+starting_point = [0,100, 10, 50] 
 
 
 xs,ys = generate_trajectory(T,starting_point)
 
 
-plt.figure(figsize=custom_figsize)
-plt.title('Trajectories')
-plt.scatter(xs[0,start_ind:],xs[1,start_ind:],c='r',s=dot_size, label='True values')
-plt.scatter(ys[0,start_ind:],ys[1,start_ind:],c='b',s=dot_size, label='Observed values')
-
 #kalman filter
-kalman_xs, kalman_cov = kalman_filter(xs,ys, T, starting_point, np.zeros((4,4)))
+kalman_start = np.random.multivariate_normal(starting_point, np.eye(4) * 10)
+kalman_xs, kalman_covs, kalman_xs_filtered, kalman_covs_filtered = kalman_filter(ys, kalman_start, Q, R)
+rts_xs, rts_covs, rts_ls = rts_smoothing(ys, kalman_xs, kalman_covs, kalman_xs_filtered, kalman_covs_filtered)
 
 err_kal = np.sum((xs[:2,:]-kalman_xs[:2,:])**2,axis=0)
 err_y = np.sum((xs[:2,:]-ys)**2,axis=0)
+err_rts = np.sum((xs[:2,:]-rts_xs[:2,:])**2,axis=0)
 
 print('Mean squared error for real and observed: {}'.format(mse(xs[:2,:],ys)))
 print('Mean squared error for real and kalman: {}'.format(mse(xs[:2,:], kalman_xs[:2,:])))
+print('Mean squared error for real and rts: {}'.format(mse(xs[:2,:], rts_xs[:2,:])))
 
+
+
+em_algorithm(ys, starting_point, 1, 0.01)
+
+plt.figure(1, figsize=custom_figsize)
+plt.title('Trajectories')
+plt.scatter(xs[0,start_ind:],xs[1,start_ind:],c='r',s=dot_size, label='True values')
+plt.scatter(ys[0,start_ind:],ys[1,start_ind:],c='b',s=dot_size, label='Observed values')
 plt.scatter(kalman_xs[0,start_ind:], kalman_xs[1,start_ind:], c='g', s=dot_size, label='Values from kalman filter')
+plt.scatter(rts_xs[0,start_ind:], rts_xs[1,start_ind:], c='y', s=dot_size, label='Values from RTS')
 plt.legend()
 
 plt.figure(2, figsize=custom_figsize)
 plt.title('Errors')
 plt.plot(np.arange(T), err_kal, label = 'Squared error for kalman filter')
 plt.plot(np.arange(T), err_y, label = 'Squared error for observed values')
+plt.plot(np.arange(T), err_rts, label = 'Squared error for RTS')
 plt.legend()
-plt.show()
+#plt.show()
 
 
 # In[ ]:
