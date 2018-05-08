@@ -1,2 +1,0 @@
-# ASP
-Labs for ASP
